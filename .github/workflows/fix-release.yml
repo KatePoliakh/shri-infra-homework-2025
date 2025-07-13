@@ -1,0 +1,75 @@
+name: Fix Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+
+jobs:
+  fix-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Checkout release branch
+        run: |
+          git fetch origin releases/${{ inputs.version }}
+          git checkout releases/${{ inputs.version }}
+
+      - name: Run Type Check & Tests
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run test
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Get commit range
+        id: commits
+        run: |
+          PREV_TAG=v${{ inputs.version }}$(echo "$GITHUB_REF_NAME" | grep -o '_fix[0-9]*' || echo "")
+          COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
+          echo "commits=$COMMITS" >> $GITHUB_ENV
+
+      - name: Install YC CLI and login to YCR
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+        run: |
+          curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
+          echo "$YC_TOKEN" | ~/.local/share/yandex-cloud/bin/yc container registry configure-docker $YC_REGISTRY
+
+      - name: Build Docker image
+        run: |
+          FIX_NUMBER=$(git rev-list HEAD --count)
+          docker build -t $YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER -t $YC_REGISTRY/app:${{ inputs.version }}_latest .
+
+      - name: Push Docker image
+        run: |
+          docker push $YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER
+          docker push $YC_REGISTRY/app:${{ inputs.version }}_latest
+
+      - name: Create Git tag
+        run: |
+          git tag v${{ inputs.version }}_fix$FIX_NUMBER
+          git push origin v${{ inputs.version }}_fix$FIX_NUMBER
+
+      - name: Add comment to release issue
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          message: |
+            ### Fix released: v${{ inputs.version }}_fix$FIX_NUMBER
+            Date: $(date +"%Y-%m-%d")
+            Author: ${{ github.actor }}
+            Commits:
+            ${{ env.commits }}
+            Docker Image: `$YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER`

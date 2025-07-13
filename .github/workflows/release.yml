@@ -1,0 +1,86 @@
+name: Release Flow
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: 'Release version'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Install YC CLI and login to YCR
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+        run: |
+          curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
+          echo "$YC_TOKEN" | ~/.local/share/yandex-cloud/bin/yc container registry configure-docker $YC_REGISTRY
+
+      - name: Run Lint & Tests
+        run: |
+          npm ci
+          npm run lint
+          npm run test
+
+      - name: Get commit range
+        id: commits
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
+          echo "commits=$COMMITS" >> $GITHUB_ENV
+
+      - name: Create release branch
+        run: |
+          VERSION=${{ github.run_number }}
+          git checkout -b releases/$VERSION
+          git push origin releases/$VERSION
+
+      - name: Build Docker image
+        run: |
+          VERSION=${{ github.run_number }}
+          docker build -t $YC_REGISTRY/app:$VERSION -t $YC_REGISTRY/app:${VERSION}_latest .
+
+      - name: Push Docker image
+        run: |
+          docker push $YC_REGISTRY/app:$VERSION
+          docker push $YC_REGISTRY/app:${VERSION}_latest
+
+      - name: Create Git tag
+        run: |
+          VERSION=${{ github.run_number }}
+          git tag v$VERSION
+          git push origin v$VERSION
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION=${{ github.run_number }}
+          echo "# v$VERSION\n\n${{ env.commits }}\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "Update CHANGELOG for v$VERSION"
+          git push
+
+      - name: Create Release Issue
+        uses: peter-evans/create-issue@v5
+        with:
+          title: "Release v${{ github.run_number }}"
+          body: |
+            Date: $(date +"%Y-%m-%d")
+            Author: ${{ github.actor }}
+            Version: v${{ github.run_number }}
+            Commits:
+            ${{ env.commits }}
+            Docker Image: `$YC_REGISTRY/app:${{ github.run_number }}`
+          labels: release
