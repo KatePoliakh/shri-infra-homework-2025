@@ -45,15 +45,15 @@ jobs:
           YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
              VERSION=${{ inputs.version }}
-              FULL_IMAGE_NAME="cr.yandex/$YC_REGISTRY_ID/$IMAGE_NAME:${VERSION}_latest"
+              FULL_IMAGE_NAME="$YC_REGISTRY:${VERSION}_latest"
               echo "🔍 Checking if image exists: $FULL_IMAGE_NAME"
               
-              AUTH_HEADER="Authorization: Bearer ${{ secrets.YC_OAUTH_TOKEN }}"
+              AUTH_HEADER="Authorization: Bearer ${{ secrets.YC_TOKEN }}"
               REGISTRY_URL="https://container-registry.api.cloud.yandex.net/container-registry/v1/images"
           
               RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
                 -H "$AUTH_HEADER" \
-                "$REGISTRY_URL/$YC_REGISTRY_ID/$IMAGE_NAME/tags/${VERSION}_latest")
+                "$REGISTRY_URL/$YC_REGISTRY/tags/${VERSION}_latest")
           
               if [ "$RESPONSE" -eq 200 ]; then
                 echo "✅ Image found in registry"
