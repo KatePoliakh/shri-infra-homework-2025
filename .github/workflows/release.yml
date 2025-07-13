@@ -106,21 +106,22 @@ jobs:
           git add CHANGELOG.md
           git commit -m "Update CHANGELOG for v$VERSION"
 
-          # Проверяем текущую ветку
           CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
           echo "📌 Current branch: $CURRENT_BRANCH — trying to push to this branch"
 
-          # Пушим в текущую ветку (releases/X), а не в main
           git push origin $CURRENT_BRANCH
 
       - name: 💬 Create Release Issue via GitHub API
-        id: create_issue
+        env:
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
           TITLE="🚢 Release v${{ github.run_number }}"
-          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`\n\n📜 Commits:\n${{ env.commits }}" 
-
+          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`\n\n📜 Commits:\n${{ env.commits }}"
+          
+          echo "📌 Creating GitHub Issue: $TITLE"
           ISSUE_JSON=$(mktemp)
-          cat <<EOF > $ISSUE_JSON
+          cat <<EOF > "$ISSUE_JSON"
           {
             "title": "$TITLE",
             "body": "$BODY",
@@ -128,14 +129,24 @@ jobs:
           }
           EOF
 
-          ISSUE_URL="https://api.github.com/repos/ ${{ github.repository }}/issues"
-          RESPONSE=$(curl -fsSL --data "@$ISSUE_JSON" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
+          ISSUE_URL="https://api.github.com/repos/${{ github.repository }}/issues"
+          echo "📤 Sending request to: $ISSUE_URL"
+
+          RESPONSE=$(curl -fsSL \
+            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Accept: application/vnd.github.v3+json" \
+            --data "@$ISSUE_JSON" \
             "$ISSUE_URL")
 
-          ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
-          echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
+          if echo "$RESPONSE" | grep -q '"id"'; then
+            ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
+            echo "✅ Issue created successfully: #$ISSUE_NUMBER"
+            echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
+          else
+            echo "❌ Failed to create issue. Response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
 
       - name: 💥 Comment on Issue if failed
         if: ${{ failure() }}
