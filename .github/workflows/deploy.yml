@@ -50,30 +50,23 @@ jobs:
           fi
 
       - name: 🛠️ SSH into server and deploy via SSH command
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          echo "🔑 Writing SSH private key..."
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            IMAGE="${{ secrets.YC_REGISTRY_ID }}:${{ github.event.inputs.version }}_latest"
 
-          echo "🔌 Connecting to server ($SERVER_IP) and deploying app..."
-          ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP <<EOF
-            echo "🐋 Pulling Docker image..."
-            docker pull $YC_REGISTRY:${VERSION}_latest
+            echo "🐋 Pulling image: $IMAGE"
+            docker login cr.yandex -u oauth --password-stdin <<< "${{ secrets.YC_TOKEN }}"
+            docker pull "$IMAGE"
 
-            echo "🛑 Stopping old container..."
-            docker stop shri-infra-homework-2025 || true
+            echo "🛑 Stopping and removing old container..."
+            docker stop app || true && docker rm app || true
 
-            echo "🗑 Removing old container..."
-            docker rm shri-infra-homework-2025 || true
-
-            echo "🚀 Running new container..."
-            docker run -d -p 3000:3000 --name shri-infra-homework-2025 $YC_REGISTRY:${VERSION}_latest
-          EOF
+            echo "📦 Running new container..."
+            docker run -d --name app -p 3000:3000 "$IMAGE"
 
       - name: 💬 Get Issue Number from Release Tag
         id: get_issue
