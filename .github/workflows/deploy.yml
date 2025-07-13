@@ -38,10 +38,7 @@ jobs:
           yc --version
 
           echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | docker login \
-            --username oauth \
-            --password-stdin \
-            cr.yandex
+           echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
 
       - name: 🔍 Check if image exists in YCR
         env:
