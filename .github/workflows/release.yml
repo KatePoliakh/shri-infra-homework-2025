@@ -32,9 +32,11 @@ jobs:
           echo "🔄 Installing Yandex Cloud CLI..."
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
 
+          echo "✅ Source .bashrc to update PATH"
+          source ~/.bashrc
+
           echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | ~/.local/share/yandex-cloud/bin/yc container registry configure-docker $YC_REGISTRY
-          docker info
+          echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
 
       - name: 🧪 Run Lint & Tests
         run: |
@@ -78,7 +80,7 @@ jobs:
         run: |
           VERSION=${{ github.run_number }}
           echo "🏷️ Creating git tag v$VERSION"
-          git tag v$VERSION
+          git tag -a v$VERSION -m "Release v$VERSION (#${{ github.run_number }})"
           git push origin v$VERSION
 
       - name: 📄 Update CHANGELOG.md
@@ -90,7 +92,7 @@ jobs:
           git commit -m "Update CHANGELOG for v$VERSION"
           git push origin main
 
-      - name: 📣 Create Release Issue via GitHub API
+      - name: 💬 Create Release Issue via GitHub API
         id: create_issue
         run: |
           TITLE="🚢 Release v${{ github.run_number }}"
@@ -105,6 +107,7 @@ jobs:
             "labels": ["release"]
           }
           EOF
+
           ISSUE_URL="https://api.github.com/repos/ ${{ github.repository }}/issues"
           RESPONSE=$(curl -fsSL --data "@$ISSUE_JSON" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
@@ -115,7 +118,7 @@ jobs:
 
           echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
 
-      - name: 💬 Comment on Issue if failed (error handling)
+      - name: 💥 Comment on Issue if failed
         if: ${{ failure() }}
         run: |
           ISSUE_NUMBER=${{ env.ISSUE_NUMBER }}
