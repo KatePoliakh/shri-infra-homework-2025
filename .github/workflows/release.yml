@@ -67,17 +67,24 @@ jobs:
       - name: 🛠️ Build Docker image
         run: |
           VERSION=${{ github.run_number }}
+          IMAGE_NAME=$YC_REGISTRY:$VERSION
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
+
           echo "🏗️ Building Docker image with tags:"
-          echo " - $YC_REGISTRY:$VERSION"
-          echo " - $YC_REGISTRY:${VERSION}_latest"
-          docker build -t $YC_REGISTRY:$VERSION -t $YC_REGISTRY:${VERSION}_latest .
+          echo " - $IMAGE_NAME"
+          echo " - $LATEST_IMAGE"
+
+          docker build -t $IMAGE_NAME -t $LATEST_IMAGE .
 
       - name: 🚀 Push Docker image to Yandex Container Registry
         run: |
           VERSION=${{ github.run_number }}
+          IMAGE_NAME=$YC_REGISTRY:$VERSION
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
+
           echo "🚚 Pushing image to registry..."
-          docker push $YC_REGISTRY:$VERSION
-          docker push $YC_REGISTRY:${VERSION}_latest
+          docker push $IMAGE_NAME
+          docker push $LATEST_IMAGE
 
       - name: 🏷️ Create Git tag
         run: |
@@ -99,7 +106,7 @@ jobs:
         id: create_issue
         run: |
           TITLE="🚢 Release v${{ github.run_number }}"
-          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📜 Commits:\n${{ env.commits }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY/app:${{ github.run_number }}\n\`\`\`"
+          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📜 Commits:\n${{ env.commits }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`"
           
           echo "📌 Creating GitHub Issue: $TITLE"
           ISSUE_JSON=$(mktemp)
