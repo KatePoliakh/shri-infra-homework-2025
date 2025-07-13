@@ -9,7 +9,6 @@ on:
 
 env:
   YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
-  VERSION: ${{ github.run_number }}
 
 jobs:
   release:
@@ -17,8 +16,6 @@ jobs:
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 
 
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
@@ -30,15 +27,28 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: 🔄 Authenticate with Yandex Container Registry
+      - name: ☁️ Install YC CLI and login to Container Registry
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
         run: |
-          echo "${{ secrets.YC_TOKEN }}" | docker login \
+          echo "🔄 Installing Yandex Cloud CLI..."
+          curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
+
+          echo "✅ Add CLI path manually"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          echo "🔍 Checking yc is installed..."
+          yc --version
+
+          echo "🔐 Logging into Yandex Container Registry..."
+          echo "$YC_TOKEN" | docker login \
             --username oauth \
             --password-stdin \
             cr.yandex
 
       - name: 🧪 Run Lint & Tests
         run: |
+          echo "🧪 Running lint and tests..."
           npm ci
           npm run lint
           npm run test
@@ -46,11 +56,11 @@ jobs:
       - name: 📝 Get commit range
         id: commits
         run: |
-            echo "📄 Getting commit history..."
-            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-            COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
-            echo "commits=$COMMITS" >> $GITHUB_ENV
-            echo "📄 Found commits:\n$COMMITS"
+          echo "📄 Getting commit history..."
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
+          echo "commits=$COMMITS" >> $GITHUB_ENV
+          echo "📄 Found commits:\n$COMMITS"
 
       - name: 🌿 Create release branch
         run: |
@@ -62,51 +72,51 @@ jobs:
       - name: 🛠️ Build Docker image
         run: |
           VERSION=${{ github.run_number }}
+          IMAGE_NAME=$YC_REGISTRY:$VERSION
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
+
           echo "🏗️ Building Docker image with tags:"
-          echo " - ${{ env.YC_REGISTRY }}:$VERSION"
-          echo " - ${{ env.YC_REGISTRY }}:${VERSION}_latest"
-          
-          docker build \
-            -t ${{ env.YC_REGISTRY }}:$VERSION \
-            -t ${{ env.YC_REGISTRY }}:${VERSION}_latest .
+          echo " - $IMAGE_NAME"
+          echo " - $LATEST_IMAGE"
+
+          docker build -t $IMAGE_NAME -t $LATEST_IMAGE .
 
       - name: 🚀 Push Docker image to Yandex Container Registry
         run: |
           VERSION=${{ github.run_number }}
-          echo "🚚 Pushing images to registry..."
-          docker push ${{ env.YC_REGISTRY }}:$VERSION
-          docker push ${{ env.YC_REGISTRY }}:${VERSION}_latest
+          IMAGE_NAME=$YC_REGISTRY:$VERSION
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
+
+          echo "🚚 Pushing image to registry..."
+          docker push $IMAGE_NAME
+          docker push $LATEST_IMAGE
 
       - name: 🏷️ Create Git tag
         run: |
           VERSION=${{ github.run_number }}
           echo "🏷️ Creating git tag v$VERSION"
-          git tag -a v$VERSION -m "Release v$VERSION"
+          git tag -a v$VERSION -m "Release v$VERSION (#${{ github.run_number }})"
           git push origin v$VERSION
 
       - name: 📄 Update CHANGELOG.md
         run: |
           VERSION=${{ github.run_number }}
           echo "📝 Updating CHANGELOG.md"
-          
-          echo "## Version $VERSION" > CHANGELOG.tmp
-          echo "${{ env.commits }}" >> CHANGELOG.tmp
-          echo "\n" >> CHANGELOG.tmp
-          cat CHANGELOG.md >> CHANGELOG.tmp
-          mv CHANGELOG.tmp CHANGELOG.md
-          
+          echo "# v$VERSION\n\n${{ env.commits }}\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
           git add CHANGELOG.md
-          git commit -m "Update CHANGELOG for version $VERSION"
-          
-          git push origin releases/$VERSION
+          git commit -m "Update CHANGELOG for v$VERSION"
+          git push origin main || {
+            echo "❌ Failed to push to main. You might be on a detached HEAD or wrong branch."
+            git status
+            exit 1
+          }
 
       - name: 💬 Create Release Issue via GitHub API
         id: create_issue
         run: |
           TITLE="🚢 Release v${{ github.run_number }}"
-          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📜 Commits:\n${{ env.commits }}\n\n📦 Docker Image:\n\`\`\`bash\n${{ env.YC_REGISTRY }}:${{ github.run_number }}\n${{ env.YC_REGISTRY }}:${{ github.run_number }}_latest\n\`\`\`"
-          
-          echo "📌 Creating GitHub Issue: $TITLE"
+          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📦 Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`\n\n📜 Commits:\n${{ env.commits }}"
+
           ISSUE_JSON=$(mktemp)
           cat <<EOF > $ISSUE_JSON
           {
@@ -116,7 +126,7 @@ jobs:
           }
           EOF
 
-          ISSUE_URL="https://api.github.com/repos/${{ github.repository }}/issues"
+          ISSUE_URL="https://api.github.com/repos/ ${{ github.repository }}/issues"
           RESPONSE=$(curl -fsSL --data "@$ISSUE_JSON" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -132,11 +142,14 @@ jobs:
           echo "💬 Adding error comment to issue #$ISSUE_NUMBER"
           ERROR_COMMENT="🚨 Release failed during execution.\n\nWorkflow: [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\nUser: ${{ github.actor }}\nDate: $(date +'%Y-%m-%d %T')"
           
+          COMMENT_JSON=$(mktemp)
+          echo "{\"body\": \"$ERROR_COMMENT\"}" > $COMMENT_JSON
+
           curl -fsSL --request POST \
-            --url "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            --url "https://api.github.com/repos/ ${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}/comments" \
             --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             --header "Accept: application/vnd.github.v3+json" \
-            --data "{\"body\": \"$ERROR_COMMENT\"}"
+            --data "@$COMMENT_JSON"
 
       - name: 🎉 Comment on Issue if success
         if: ${{ success() }}
@@ -144,9 +157,12 @@ jobs:
           ISSUE_NUMBER=${{ env.ISSUE_NUMBER }}
           echo "💬 Adding success comment to issue #$ISSUE_NUMBER"
           SUCCESS_COMMENT="🎉 Release completed successfully!\n\nWorkflow: [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          
+
+          COMMENT_JSON=$(mktemp)
+          echo "{\"body\": \"$SUCCESS_COMMENT\"}" > $COMMENT_JSON
+
           curl -fsSL --request POST \
-            --url "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            --url "https://api.github.com/repos/ ${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}/comments" \
             --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             --header "Accept: application/vnd.github.v3+json" \
-            --data "{\"body\": \"$SUCCESS_COMMENT\"}"
+            --data "@$COMMENT_JSON"
