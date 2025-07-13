@@ -44,18 +44,20 @@ jobs:
             cr.yandex
 
       - name: 🔍 Check if image exists in YCR
-        id: check_image
+        env:
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
-          VERSION=${{ inputs.version }}
-          echo "🔍 Checking for image: $YC_REGISTRY:${VERSION}_latest"
-          IMAGE_EXISTS=$(yc container image list --registry-id $YC_REGISTRY | grep "${VERSION}_latest")
-
-          if [ -z "$IMAGE_EXISTS" ]; then
-            echo "❌ Image not found!"
-            exit 1
-          else
-            echo "✅ Image found, proceeding with deployment."
-          fi
+              VERSION=${{ inputs.version }}
+              echo "🔍 Checking for image: $YC_REGISTRY:${VERSION}_latest"
+              
+              IMAGE_EXISTS=$(yc container image list --registry-id $YC_REGISTRY | grep "${VERSION}_latest")
+              
+              if [ -z "$IMAGE_EXISTS" ]; then
+                echo "❌ Image not found!"
+                exit 1
+              else
+                echo "✅ Image found, proceeding with deployment."
+              fi
 
       - name: 🛠️ SSH into server and deploy via SSH command
         env:
