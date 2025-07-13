@@ -32,7 +32,7 @@ jobs:
 
       - name: 🔄 Authenticate with Yandex Container Registry
         run: |
-          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login \
+          echo "${{ secrets.YC_TOKEN }}" | docker login \
             --username oauth \
             --password-stdin \
             cr.yandex
