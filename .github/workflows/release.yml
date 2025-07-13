@@ -46,17 +46,11 @@ jobs:
       - name: 📝 Get commit range
         id: commits
         run: |
-          echo "📄 Getting commit history..."
-          PREV_TAG=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
-          
-          if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)")
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD)
-          fi
-          
-          echo "commits=$COMMITS" >> $GITHUB_ENV
-          echo "📄 Found commits:\n$COMMITS"
+            echo "📄 Getting commit history..."
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
+            echo "commits=$COMMITS" >> $GITHUB_ENV
+            echo "📄 Found commits:\n$COMMITS"
 
       - name: 🌿 Create release branch
         run: |
