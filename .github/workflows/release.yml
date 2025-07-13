@@ -43,7 +43,7 @@ jobs:
           yc --version
 
           echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
+          
           echo "$YC_TOKEN" | docker login \
             --username oauth \
             --password-stdin \
