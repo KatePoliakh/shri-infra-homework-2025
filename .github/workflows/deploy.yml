@@ -40,19 +40,18 @@ jobs:
           echo "🔐 Logging into Yandex Container Registry..."
            echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
 
-      - name: 🔍 Check if image exists in YCR
-        env:
-            YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+      - name: 🐳 Check if image exists in registry
         run: |
              VERSION=${{ inputs.version }}
-             FULL_IMAGE_NAME="$YC_REGISTRY:${VERSION}_latest"
+             FULL_IMAGE_NAME="${{ secrets.YC_REGISTRY }}:${VERSION}_latest"
              echo "🔍 Checking if image exists: $FULL_IMAGE_NAME"
-            
-             if docker pull $FULL_IMAGE_NAME; then
-               echo "✅ Image found in registry"
-             else
-               echo "❌ Image not found in registry"
+   
+             # Try pulling the image manifest
+             if ! docker manifest inspect $FULL_IMAGE_NAME > /dev/null 2>&1; then
+               echo "❌ Image not found!"
                exit 1
+             else
+               echo "✅ Image found"
              fi
 
       - name: 🛠️ SSH into server and deploy via SSH command
