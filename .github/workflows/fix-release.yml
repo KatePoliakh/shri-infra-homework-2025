@@ -6,70 +6,122 @@ on:
       version:
         type: string
         required: true
+        description: 'Версия, для которой создаётся фикс'
+
+env:
+  YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
 
 jobs:
   fix-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Checkout release branch
+      - name: 🌿 Checkout release branch
         run: |
-          git fetch origin releases/${{ inputs.version }}
-          git checkout releases/${{ inputs.version }}
+          VERSION=${{ inputs.version }}
+          echo "🔄 Fetching release branch releases/$VERSION"
+          git fetch origin releases/$VERSION
+          git checkout releases/$VERSION
 
-      - name: Run Type Check & Tests
+      - name: 🧪 Run Type Check & Tests
         run: |
+          echo "🧪 Running type check and tests..."
           npm ci
           npx tsc --noEmit
           npm run test
 
-      - name: Configure Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-      - name: Get commit range
+      - name: 📝 Get commit range
         id: commits
         run: |
-          PREV_TAG=v${{ inputs.version }}$(echo "$GITHUB_REF_NAME" | grep -o '_fix[0-9]*' || echo "")
+          echo "📄 Getting commit history since last tag..."
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
           echo "commits=$COMMITS" >> $GITHUB_ENV
+          echo "📄 Found commits:\n$COMMITS"
 
-      - name: Install YC CLI and login to YCR
+      - name: ☁️ Install YC CLI and login to YCR
         env:
           YC_TOKEN: ${{ secrets.YC_TOKEN }}
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
+          echo "🔄 Installing Yandex Cloud CLI..."
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
-          echo "$YC_TOKEN" | ~/.local/share/yandex-cloud/bin/yc container registry configure-docker $YC_REGISTRY
 
-      - name: Build Docker image
+          echo "✅ Add CLI path manually"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          echo "🔍 Checking yc is installed..."
+          yc --version
+
+          echo "🔐 Logging into Yandex Container Registry..."
+          echo "$YC_TOKEN" | docker login \
+            --username oauth \
+            --password-stdin \
+            cr.yandex
+
+      - name: 🛠️ Build Docker image
         run: |
+          VERSION=${{ inputs.version }}
           FIX_NUMBER=$(git rev-list HEAD --count)
-          docker build -t $YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER -t $YC_REGISTRY/app:${{ inputs.version }}_latest .
+          IMAGE_NAME=$YC_REGISTRY:${VERSION}_fix$FIX_NUMBER
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
 
-      - name: Push Docker image
+          echo "🏗️ Building Docker image with tags:"
+          echo " - $IMAGE_NAME"
+          echo " - $LATEST_IMAGE"
+
+          docker build -t $IMAGE_NAME -t $LATEST_IMAGE .
+
+      - name: 🚀 Push Docker image to Yandex Container Registry
         run: |
-          docker push $YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER
-          docker push $YC_REGISTRY/app:${{ inputs.version }}_latest
+          VERSION=${{ inputs.version }}
+          IMAGE_NAME=$YC_REGISTRY:${VERSION}_fix$(git rev-list HEAD --count)
+          LATEST_IMAGE=$YC_REGISTRY:${VERSION}_latest
 
-      - name: Create Git tag
+          echo "🚚 Pushing image to registry..."
+          docker push $IMAGE_NAME
+          docker push $LATEST_IMAGE
+
+      - name: 🏷️ Create Git tag
         run: |
-          git tag v${{ inputs.version }}_fix$FIX_NUMBER
-          git push origin v${{ inputs.version }}_fix$FIX_NUMBER
+          VERSION=${{ inputs.version }}
+          FIX_NUMBER=$(git rev-list HEAD --count)
+          echo "🏷️ Creating git tag v${VERSION}_fix$FIX_NUMBER"
+          git tag -a v${VERSION}_fix$FIX_NUMBER -m "Fix for v${VERSION}"
+          git push origin v${VERSION}_fix$FIX_NUMBER
 
-      - name: Add comment to release issue
-        uses: thollander/actions-comment-pull-request@v2
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          message: |
-            ### Fix released: v${{ inputs.version }}_fix$FIX_NUMBER
-            Date: $(date +"%Y-%m-%d")
-            Author: ${{ github.actor }}
-            Commits:
-            ${{ env.commits }}
-            Docker Image: `$YC_REGISTRY/app:${{ inputs.version }}_fix$FIX_NUMBER`
+      - name: 💬 Get linked Issue Number from latest tag
+        id: get_issue
+        run: |
+          TAG_MSG=$(git tag -l v${{ inputs.version }} --format='%(contents)')
+          ISSUE_NUMBER=$(echo "$TAG_MSG" | grep -o '#[0-9]*' | tr -d '#' || echo "")
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "⚠️ Could not find issue number in tag message."
+            echo "ISSUE_NUMBER=" >> $GITHUB_ENV
+          else
+            echo "📌 Found linked issue #$ISSUE_NUMBER"
+            echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
+          fi
+
+      - name: 💬 Comment on Issue via GitHub API (if exists)
+        if: env.ISSUE_NUMBER != ''
+        run: |
+          ISSUE_NUMBER=${{ env.ISSUE_NUMBER }}
+          FIX_NUMBER=$(git rev-list HEAD --count)
+          VERSION=${{ inputs.version }}
+
+          COMMENT="🔧 **Fix released**: v$VERSION\_fix$FIX_NUMBER\nDate: $(date +'%Y-%m-%d')\nAuthor: ${{ github.actor }}\n\nCommits:\n${{ env.commits }}\n\nDocker Image:\n\`\`\`bash\n$YC_REGISTRY:${VERSION}_fix$FIX_NUMBER\n$YC_REGISTRY:${VERSION}_latest\n\`\`\`"
+
+          echo "💬 Adding comment to issue #$ISSUE_NUMBER"
+          curl -fsSL --request POST \
+            --url "https://api.github.com/repos/ ${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}/comments" \
+            --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            --header "Accept: application/vnd.github.v3+json" \
+            --data '{"body":"'"$COMMENT"'"}'
