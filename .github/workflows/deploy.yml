@@ -8,6 +8,9 @@ on:
         required: true
         description: 'Version to deploy (e.g. 1)'
 
+env:
+  YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -35,7 +38,10 @@ jobs:
           yc --version
 
           echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
+          echo "$YC_TOKEN" | docker login \
+            --username oauth \
+            --password-stdin \
+            cr.yandex
 
       - name: 🔍 Check if image exists in YCR
         id: check_image
@@ -99,7 +105,7 @@ jobs:
           
           echo "💬 Adding comment to issue #$ISSUE_NUMBER"
           curl -fsSL --request POST \
-            --url "https://api.github.com/repos/ ${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}/comments" \
+            --url "https://api.github.com/repos/${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}/comments" \
             --header "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             --header "Accept: application/vnd.github.v3+json" \
             --data '{"body":"'"$COMMENT"'"}'
