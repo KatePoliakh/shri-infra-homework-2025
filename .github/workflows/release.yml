@@ -9,7 +9,6 @@ on:
 
 env:
   YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
-  VERSION: ${{ github.run_number }}
 
 jobs:
   release:
@@ -28,10 +27,9 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: 🔄 Install YC CLI and login to Container Registry
+      - name: ☁️ Install YC CLI and login to Container Registry
         env:
           YC_TOKEN: ${{ secrets.YC_TOKEN }}
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
           echo "🔄 Installing Yandex Cloud CLI..."
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
@@ -43,7 +41,6 @@ jobs:
           yc --version
 
           echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
           echo "$YC_TOKEN" | docker login \
             --username oauth \
             --password-stdin \
@@ -108,15 +105,20 @@ jobs:
           echo "# v$VERSION\n\n${{ env.commits }}\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
           git add CHANGELOG.md
           git commit -m "Update CHANGELOG for v$VERSION"
-          git push origin main
+
+          # Проверяем текущую ветку
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          echo "📌 Current branch: $CURRENT_BRANCH — trying to push to this branch"
+
+          # Пушим в текущую ветку (releases/X), а не в main
+          git push origin $CURRENT_BRANCH
 
       - name: 💬 Create Release Issue via GitHub API
         id: create_issue
         run: |
           TITLE="🚢 Release v${{ github.run_number }}"
-          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📜 Commits:\n${{ env.commits }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`"
-          
-          echo "📌 Creating GitHub Issue: $TITLE"
+          BODY="📅 Date: $(date +'%Y-%m-%d')\n🧑 Author: ${{ github.actor }}\n🔢 Version: v${{ github.run_number }}\n\n📦 Docker Image:\n\`\`\`bash\n$YC_REGISTRY:${{ github.run_number }}\n$YC_REGISTRY:${{ github.run_number }}_latest\n\`\`\`\n\n📜 Commits:\n${{ env.commits }}" 
+
           ISSUE_JSON=$(mktemp)
           cat <<EOF > $ISSUE_JSON
           {
@@ -133,14 +135,17 @@ jobs:
             "$ISSUE_URL")
 
           ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
-
           echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
 
       - name: 💥 Comment on Issue if failed
         if: ${{ failure() }}
         run: |
           ISSUE_NUMBER=${{ env.ISSUE_NUMBER }}
-          echo "💬 Adding error comment to issue #$ISSUE_NUMBER"
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "⚠️ Could not comment: no issue number found"
+            exit 0
+          fi
+
           ERROR_COMMENT="🚨 Release failed during execution.\n\nWorkflow: [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\nUser: ${{ github.actor }}\nDate: $(date +'%Y-%m-%d %T')"
           
           COMMENT_JSON=$(mktemp)
@@ -156,7 +161,6 @@ jobs:
         if: ${{ success() }}
         run: |
           ISSUE_NUMBER=${{ env.ISSUE_NUMBER }}
-          echo "💬 Adding success comment to issue #$ISSUE_NUMBER"
           SUCCESS_COMMENT="🎉 Release completed successfully!\n\nWorkflow: [Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           
           COMMENT_JSON=$(mktemp)
