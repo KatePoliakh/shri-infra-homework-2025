@@ -53,7 +53,7 @@ jobs:
           
               RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
                 -H "$AUTH_HEADER" \
-                "$REGISTRY_URL/$YC_REGISTRY/tags/${VERSION}_latest")
+                "$REGISTRY_URL/$YC_REGISTRY/${VERSION}_latest")
           
               if [ "$RESPONSE" -eq 200 ]; then
                 echo "✅ Image found in registry"
