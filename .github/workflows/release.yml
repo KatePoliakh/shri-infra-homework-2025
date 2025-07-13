@@ -73,7 +73,7 @@ jobs:
           git push
 
       - name: Create Release Issue
-        uses: peter-evans/create-issue@v5
+        uses: peter-evans/create-issue@v8
         with:
           title: "Release v${{ github.run_number }}"
           body: |
