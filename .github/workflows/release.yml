@@ -128,7 +128,7 @@ jobs:
           }
           EOF
 
-          ISSUE_URL="https://api.github.com/repos/ ${{ github.repository }}/issues"
+          ISSUE_URL="https://api.github.com/repos/${{ github.repository }}/issues"
           RESPONSE=$(curl -fsSL --data "@$ISSUE_JSON" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
