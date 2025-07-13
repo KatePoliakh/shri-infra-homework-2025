@@ -68,16 +68,16 @@ jobs:
         run: |
           VERSION=${{ github.run_number }}
           echo "🏗️ Building Docker image with tags:"
-          echo " - $YC_REGISTRY/app:$VERSION"
-          echo " - $YC_REGISTRY/app:${VERSION}_latest"
-          docker build -t $YC_REGISTRY/app:$VERSION -t $YC_REGISTRY/app:${VERSION}_latest .
+          echo " - $YC_REGISTRY:$VERSION"
+          echo " - $YC_REGISTRY:${VERSION}_latest"
+          docker build -t $YC_REGISTRY:$VERSION -t $YC_REGISTRY:${VERSION}_latest .
 
       - name: 🚀 Push Docker image to Yandex Container Registry
         run: |
           VERSION=${{ github.run_number }}
           echo "🚚 Pushing image to registry..."
-          docker push $YC_REGISTRY/app:$VERSION
-          docker push $YC_REGISTRY/app:${VERSION}_latest
+          docker push $YC_REGISTRY:$VERSION
+          docker push $YC_REGISTRY:${VERSION}_latest
 
       - name: 🏷️ Create Git tag
         run: |
