@@ -23,10 +23,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: ☁️ Install YC CLI and login to Container Registry
-        env:
-          YC_TOKEN: ${{ secrets.YC_TOKEN }}
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+      - name: ☁️ Install YC CLI
         run: |
           echo "🔄 Installing Yandex Cloud CLI..."
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
@@ -37,22 +34,20 @@ jobs:
           echo "🔍 Checking yc is installed..."
           yc --version
 
-          echo "🔐 Logging into Yandex Container Registry..."
-           echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
-
-      - name: 🐳 Check if image exists in registry
+      - name: 🔐 🐳 Login to Yandex Container Registry & Check if image exists in registry
+        env:
+          IMAGE: ${{ secrets.YC_REGISTRY }}:${{ github.event.inputs.version }}_latest
         run: |
-             VERSION=${{ inputs.version }}
-             FULL_IMAGE_NAME="${{ secrets.YC_REGISTRY }}:${VERSION}_latest"
-             echo "🔍 Checking if image exists: $FULL_IMAGE_NAME"
-   
-             # Try pulling the image manifest
-             if ! docker manifest inspect $FULL_IMAGE_NAME > /dev/null 2>&1; then
-               echo "❌ Image not found!"
-               exit 1
-             else
-               echo "✅ Image found"
-             fi
+          echo "🔍 Checking for image: $IMAGE"
+
+          docker login cr.yandex -u oauth --password-stdin <<< "${{ secrets.YC_TOKEN }}"
+
+          if ! docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "❌ Image not found in registry"
+            exit 1
+          else
+            echo "✅ Image exists"
+          fi
 
       - name: 🛠️ SSH into server and deploy via SSH command
         env:
