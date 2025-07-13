@@ -24,7 +24,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: ☁️ Install YC CLI and login to Container Registry
+      - name: 🔄 Install YC CLI and login to Container Registry
         env:
           YC_TOKEN: ${{ secrets.YC_TOKEN }}
           YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
@@ -32,8 +32,11 @@ jobs:
           echo "🔄 Installing Yandex Cloud CLI..."
           curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
 
-          echo "✅ Source .bashrc to update PATH"
-          source ~/.bashrc
+          echo "✅ Add CLI path manually"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          echo "🔍 Checking yc is installed..."
+          yc --version
 
           echo "🔐 Logging into Yandex Container Registry..."
           echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
