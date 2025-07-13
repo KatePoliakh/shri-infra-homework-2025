@@ -106,11 +106,10 @@ jobs:
           git add CHANGELOG.md
           git commit -m "Update CHANGELOG for v$VERSION"
 
-          # Проверяем текущую ветку
           CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
           echo "📌 Current branch: $CURRENT_BRANCH — trying to push to this branch"
 
-          # Пушим в текущую ветку (releases/X), а не в main
           git push origin $CURRENT_BRANCH
 
       - name: 💬 Create Release Issue via GitHub API
@@ -139,7 +138,6 @@ jobs:
             --data "@$ISSUE_JSON" \
             "$ISSUE_URL")
 
-          # Проверка ответа
           if echo "$RESPONSE" | grep -q '"id"'; then
             ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
             echo "✅ Issue created successfully: #$ISSUE_NUMBER"
