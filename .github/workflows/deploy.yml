@@ -20,16 +20,24 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      - name: 📦 Install YC CLI and login to Container Registry
-        env:
-          YC_TOKEN: ${{ secrets.YC_TOKEN }}
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
-        run: |
-          echo "🔄 Installing Yandex Cloud CLI..."
-          curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
-
-          echo "🔐 Logging into Yandex Container Registry..."
-          echo "$YC_TOKEN" | ~/.local/share/yandex-cloud/bin/yc container registry configure-docker $YC_REGISTRY
+          - name: ☁️ Install YC CLI and login to Container Registry
+          env:
+            YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          run: |
+            echo "🔄 Installing Yandex Cloud CLI..."
+            curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
+  
+            echo "✅ Add CLI path manually"
+            export PATH="$HOME/yandex-cloud/bin:$PATH"
+  
+            echo "🔍 Checking yc is installed..."
+            yc --version
+  
+            echo "🔐 Logging into Yandex Container Registry..."
+            echo "$YC_TOKEN" | docker login \
+              --username oauth \
+              --password-stdin \
+              cr.yandex
 
       - name: 🔍 Check if image exists in YCR
         id: check_image
