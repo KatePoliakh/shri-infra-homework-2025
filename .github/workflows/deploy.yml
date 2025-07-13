@@ -42,25 +42,18 @@ jobs:
 
       - name: 🔍 Check if image exists in YCR
         env:
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+            YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
              VERSION=${{ inputs.version }}
-              FULL_IMAGE_NAME="$YC_REGISTRY:${VERSION}_latest"
-              echo "🔍 Checking if image exists: $FULL_IMAGE_NAME"
-              
-              AUTH_HEADER="Authorization: Bearer ${{ secrets.YC_TOKEN }}"
-              REGISTRY_URL="https://container-registry.api.cloud.yandex.net/container-registry/v1/images"
-          
-              RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
-                -H "$AUTH_HEADER" \
-                "$REGISTRY_URL/$YC_REGISTRY/${VERSION}_latest")
-          
-              if [ "$RESPONSE" -eq 200 ]; then
-                echo "✅ Image found in registry"
-              else
-                echo "❌ Image not found (HTTP $RESPONSE)"
-                exit 1
-              fi
+             FULL_IMAGE_NAME="$YC_REGISTRY:${VERSION}_latest"
+             echo "🔍 Checking if image exists: $FULL_IMAGE_NAME"
+            
+             if docker pull $FULL_IMAGE_NAME; then
+               echo "✅ Image found in registry"
+             else
+               echo "❌ Image not found in registry"
+               exit 1
+             fi
 
       - name: 🛠️ SSH into server and deploy via SSH command
         env:
