@@ -63,13 +63,8 @@ jobs:
             sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
             sudo apt-get update
             sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-            fi
-
-             if ! groups $USER | grep -q '\bdocker\b'; then
-              echo "👥 Adding user to docker group..."
-              sudo usermod -aG docker $USER
-              sudo setfacl -m user:$USER:rw /var/run/docker.sock
-            fi
+            
+            sudo usermod -aG docker $USER
 
             IMAGE="${{ secrets.YC_REGISTRY }}:${{ github.event.inputs.version }}_latest"
 
