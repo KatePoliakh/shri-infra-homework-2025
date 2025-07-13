@@ -15,37 +15,35 @@ jobs:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🧪 Configure Git user
+      - name: ⚙️ Configure Git user
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
       - name: ☁️ Install YC CLI and login to Container Registry
         env:
-            YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
-            echo "🔄 Installing Yandex Cloud CLI..."
-            curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
-  
-            echo "✅ Add CLI path manually"
-            export PATH="$HOME/yandex-cloud/bin:$PATH"
-  
-            echo "🔍 Checking yc is installed..."
-            yc --version
-  
-            echo "🔐 Logging into Yandex Container Registry..."
-            echo "$YC_TOKEN" | docker login \
-              --username oauth \
-              --password-stdin \
-              cr.yandex
+          echo "🔄 Installing Yandex Cloud CLI..."
+          curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh  | bash
+
+          echo "✅ Add CLI path manually"
+          export PATH="$HOME/yandex-cloud/bin:$PATH"
+
+          echo "🔍 Checking yc is installed..."
+          yc --version
+
+          echo "🔐 Logging into Yandex Container Registry..."
+          echo "$YC_TOKEN" | yc container registry configure-docker $YC_REGISTRY
 
       - name: 🔍 Check if image exists in YCR
         id: check_image
-        env:
-          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
         run: |
-          echo "🔍 Checking for image: $YC_REGISTRY/app:${{ inputs.version }}_latest"
-          IMAGE_EXISTS=$(yc container image list --registry-id $YC_REGISTRY | grep "${{ inputs.version }}_latest")
+          VERSION=${{ inputs.version }}
+          echo "🔍 Checking for image: $YC_REGISTRY:${VERSION}_latest"
+          IMAGE_EXISTS=$(yc container image list --registry-id $YC_REGISTRY | grep "${VERSION}_latest")
+
           if [ -z "$IMAGE_EXISTS" ]; then
             echo "❌ Image not found!"
             exit 1
@@ -57,6 +55,8 @@ jobs:
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          YC_REGISTRY: ${{ secrets.YC_REGISTRY }}
+          VERSION: ${{ inputs.version }}
         run: |
           echo "🔑 Writing SSH private key..."
           echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -65,24 +65,25 @@ jobs:
           echo "🔌 Connecting to server ($SERVER_IP) and deploying app..."
           ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP <<EOF
             echo "🐋 Pulling Docker image..."
-            docker pull $YC_REGISTRY/app:${{ inputs.version }}_latest
+            docker pull $YC_REGISTRY:${VERSION}_latest
 
             echo "🛑 Stopping old container..."
-            docker stop infra-app || true
+            docker stop shri-infra-homework-2025 || true
 
             echo "🗑 Removing old container..."
-            docker rm infra-app || true
+            docker rm shri-infra-homework-2025 || true
 
             echo "🚀 Running new container..."
-            docker run -d -p 3000:3000 --name infra-app $YC_REGISTRY/app:${{ inputs.version }}_latest
+            docker run -d -p 3000:3000 --name shri-infra-homework-2025 $YC_REGISTRY:${VERSION}_latest
           EOF
 
       - name: 💬 Get Issue Number from Release Tag
         id: get_issue
         run: |
+          echo "📌 Fetching release tag info..."
           TAG_MSG=$(git tag -l v${{ inputs.version }} --format='%(contents)')
           ISSUE_NUMBER=$(echo "$TAG_MSG" | grep -o '#[0-9]*' | tr -d '#' || echo "")
-          
+
           if [ -z "$ISSUE_NUMBER" ]; then
             echo "⚠️ Could not find issue number in tag message."
             echo "ISSUE_NUMBER=" >> $GITHUB_ENV
